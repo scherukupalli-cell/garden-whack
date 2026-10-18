@@ -13,6 +13,9 @@
     --hole: #2e1d10;
     --mole: #8a6248;
     --ink: #24301a;
+    --tnt: #d62828;
+    --tnt-dark: #9b1c1c;
+    --spark: #ffd23f;
   }
   * { box-sizing: border-box; }
   body {
@@ -26,7 +29,9 @@
     align-items: center;
     padding: 24px 16px;
   }
-  h1 { font-size: clamp(2rem, 6vw, 3rem); margin: 0 0 8px; }
+  body.shake { animation: shake 0.35s; }
+  h1 { font-size: clamp(2rem, 6vw, 3rem); margin: 0 0 4px; }
+  .tip { margin: 0 0 10px; font-size: 1rem; }
   .stats { display: flex; gap: 24px; font-size: 1.25rem; margin-bottom: 16px; }
   .grid {
     display: grid;
@@ -34,7 +39,9 @@
     gap: 16px;
     width: min(420px, 100%);
   }
+  .cell { position: relative; }
   .hole {
+    width: 100%;
     aspect-ratio: 1;
     border: none;
     border-radius: 50%;
@@ -43,8 +50,11 @@
     overflow: hidden;
     cursor: pointer;
     padding: 0;
+    display: block;
   }
   .hole:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
+
+  /* Mole */
   .mole {
     position: absolute;
     left: 20%; width: 60%; height: 70%;
@@ -61,6 +71,74 @@
   .mole::after { right: 28%; }
   .hole.up .mole { bottom: 5%; }
   .hole.hit .mole { background: #c9a27e; }
+
+  /* Dynamite decoy */
+  .tnt {
+    position: absolute;
+    left: 34%; width: 32%; height: 66%;
+    bottom: -110%;
+    background: linear-gradient(90deg, var(--tnt-dark), var(--tnt) 35%, #ef5050 50%, var(--tnt) 65%, var(--tnt-dark));
+    border-radius: 6px;
+    transition: bottom 0.12s ease-out;
+  }
+  .tnt::before {               /* label band */
+    content: "TNT";
+    position: absolute; left: 0; right: 0; top: 38%;
+    background: #f4e3c1;
+    color: var(--tnt-dark);
+    font-size: clamp(8px, 2.6vw, 12px);
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .tnt::after {                /* fuse */
+    content: "";
+    position: absolute; left: 46%; top: -18%;
+    width: 8%; height: 20%;
+    background: #3b2a1a;
+    border-radius: 2px;
+    transform: rotate(14deg);
+    transform-origin: bottom;
+  }
+  .spark {
+    position: absolute; left: 50%; top: -30%;
+    width: 22%; aspect-ratio: 1;
+    margin-left: -6%;
+    border-radius: 50%;
+    background: radial-gradient(#fff 15%, var(--spark) 45%, transparent 70%);
+    animation: flicker 0.15s infinite alternate;
+    visibility: hidden;
+  }
+  .hole.tnt-up .spark { visibility: visible; }
+  .hole.tnt-up .tnt { bottom: 8%; }
+  .hole.tnt-up .mole { bottom: -75%; }
+
+  /* Explosion */
+  .boom {
+    position: absolute; inset: -20%;
+    pointer-events: none;
+    border-radius: 50%;
+    background: radial-gradient(#fff 0 10%, var(--spark) 25%, #ff7b00 45%, var(--tnt) 60%, transparent 72%);
+    transform: scale(0);
+    opacity: 0;
+    z-index: 2;
+  }
+  .cell.exploding .boom { animation: boom 0.5s ease-out; }
+  .penalty {
+    position: absolute; left: 50%; top: 30%;
+    transform: translate(-50%, 0);
+    font-weight: 700; font-size: 1.6rem;
+    color: #fff;
+    text-shadow: 0 0 4px var(--tnt-dark), 0 2px 0 var(--tnt-dark);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 3;
+  }
+  .cell.exploding .penalty { animation: rise 0.8s ease-out; }
+  .hole.scorched { background: radial-gradient(#111 55%, #2a2018 56%); }
+
+  #score.bad { color: var(--tnt); }
+
   #start {
     margin-top: 24px;
     font: inherit; font-size: 1.25rem;
@@ -71,11 +149,34 @@
     cursor: pointer;
   }
   #start:disabled { opacity: 0.5; cursor: default; }
-  @media (prefers-reduced-motion: reduce) { .mole { transition: none; } }
+
+  @keyframes flicker { from { transform: scale(0.8); } to { transform: scale(1.15); } }
+  @keyframes boom {
+    0%   { transform: scale(0.2); opacity: 1; }
+    60%  { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1.3); opacity: 0; }
+  }
+  @keyframes rise {
+    0%   { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, -60%); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mole, .tnt { transition: none; }
+    .spark { animation: none; }
+    body.shake { animation: none; }
+  }
 </style>
 </head>
 <body>
   <h1>Garden Whack</h1>
+  <p class="tip">Whack the moles — but don't hit the dynamite! 💥 −3</p>
   <div class="stats">
     <span>Score: <b id="score">0</b></span>
     <span>Time: <b id="time">30</b></span>
@@ -86,6 +187,7 @@
 
 <script>
   const GAME_SECONDS = 30;
+  const TNT_PENALTY = 3;
   const grid = document.getElementById("grid");
   const scoreEl = document.getElementById("score");
   const timeEl = document.getElementById("time");
@@ -93,42 +195,107 @@
   const startBtn = document.getElementById("start");
 
   let score = 0, timeLeft = GAME_SECONDS, playing = false, current = -1;
+  let decoys = new Set();
   let popTimer, clockTimer;
 
   let best = 0;
   try { best = Number(localStorage.getItem("gardenWhackBest")) || 0; } catch (e) {}
   bestEl.textContent = best;
 
+  const cells = [];
   const holes = Array.from({ length: 9 }, (_, i) => {
+    const cell = document.createElement("div");
+    cell.className = "cell";
     const btn = document.createElement("button");
     btn.className = "hole";
     btn.setAttribute("aria-label", "Hole " + (i + 1));
-    btn.innerHTML = '<div class="mole"></div>';
+    btn.innerHTML = '<div class="mole"></div><div class="tnt"><div class="spark"></div></div>';
     btn.addEventListener("click", () => whack(i));
-    grid.appendChild(btn);
+    cell.appendChild(btn);
+    cell.insertAdjacentHTML("beforeend",
+      '<div class="boom"></div><div class="penalty">−' + TNT_PENALTY + '</div>');
+    grid.appendChild(cell);
+    cells.push(cell);
     return btn;
   });
 
+  function setLabel(i) {
+    const h = holes[i];
+    let what = "empty";
+    if (h.classList.contains("up")) what = "mole";
+    if (h.classList.contains("tnt-up")) what = "dynamite";
+    h.setAttribute("aria-label", "Hole " + (i + 1) + ", " + what);
+  }
+
+  function clearBoard() {
+    holes.forEach((h, i) => {
+      h.classList.remove("up", "hit", "tnt-up", "scorched");
+      setLabel(i);
+    });
+    decoys.clear();
+  }
+
   function popMole() {
-    holes.forEach(h => h.classList.remove("up", "hit"));
+    clearBoard();
     let next;
     do { next = Math.floor(Math.random() * 9); } while (next === current);
     current = next;
     holes[current].classList.add("up");
-    const speed = Math.max(450, 1000 - score * 25);
+
+    // Dynamite decoys: more likely (and more of them) as the score climbs
+    const tntChance = Math.min(0.75, 0.35 + Math.max(score, 0) * 0.02);
+    let count = 0;
+    if (Math.random() < tntChance) count = 1;
+    if (score >= 10 && Math.random() < 0.3) count++;
+    while (decoys.size < count) {
+      const d = Math.floor(Math.random() * 9);
+      if (d !== current) decoys.add(d);
+    }
+    decoys.forEach(d => holes[d].classList.add("tnt-up"));
+    holes.forEach((_, i) => setLabel(i));
+
+    const speed = Math.max(450, 1000 - Math.max(score, 0) * 25);
     popTimer = setTimeout(popMole, speed);
   }
 
+  function updateScore() {
+    scoreEl.textContent = score;
+    scoreEl.classList.toggle("bad", score < 0);
+  }
+
+  function explode(i) {
+    const h = holes[i];
+    h.classList.remove("tnt-up");
+    h.classList.add("scorched");
+    decoys.delete(i);
+    setLabel(i);
+    score -= TNT_PENALTY;
+    updateScore();
+
+    const cell = cells[i];
+    cell.classList.remove("exploding");
+    void cell.offsetWidth;            // restart animation
+    cell.classList.add("exploding");
+    setTimeout(() => cell.classList.remove("exploding"), 800);
+
+    document.body.classList.remove("shake");
+    void document.body.offsetWidth;
+    document.body.classList.add("shake");
+    setTimeout(() => document.body.classList.remove("shake"), 400);
+  }
+
   function whack(i) {
-    if (!playing || i !== current || holes[i].classList.contains("hit")) return;
+    if (!playing) return;
+    if (decoys.has(i)) { explode(i); return; }
+    if (i !== current || holes[i].classList.contains("hit")) return;
     holes[i].classList.add("hit");
     score++;
-    scoreEl.textContent = score;
+    updateScore();
   }
 
   function startGame() {
     score = 0; timeLeft = GAME_SECONDS; playing = true;
-    scoreEl.textContent = 0; timeEl.textContent = timeLeft;
+    updateScore(); timeEl.textContent = timeLeft;
     startBtn.disabled = true;
     popMole();
     clockTimer = setInterval(() => {
@@ -141,7 +308,7 @@
   function endGame() {
     playing = false;
     clearTimeout(popTimer); clearInterval(clockTimer);
-    holes.forEach(h => h.classList.remove("up", "hit"));
+    clearBoard();
     if (score > best) {
       best = score;
       bestEl.textContent = best;
