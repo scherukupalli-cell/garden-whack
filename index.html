@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Garden Whack</title>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+
 <style>
   :root {
     --sky: #cfe8f3;
@@ -14,7 +16,11 @@
     --mole: #8a6248;
     --ink: #24301a;
   }
-  * { box-sizing: border-box; }
+
+  * {
+    box-sizing: border-box;
+  }
+
   body {
     margin: 0;
     min-height: 100vh;
@@ -26,14 +32,68 @@
     align-items: center;
     padding: 24px 16px;
   }
-  h1 { font-size: clamp(2rem, 6vw, 3rem); margin: 0 0 8px; }
-  .stats { display: flex; gap: 24px; font-size: 1.25rem; margin-bottom: 16px; }
+
+  h1 {
+    font-size: clamp(2rem, 6vw, 3rem);
+    margin: 0 0 8px;
+  }
+
+  .stats {
+    display: flex;
+    gap: 24px;
+    font-size: 1.25rem;
+    margin-bottom: 16px;
+  }
+
+  /* NEW: Visual countdown timer */
+
+  .timer-container {
+    width: min(420px, 100%);
+    margin-bottom: 20px;
+  }
+
+  .timer-track {
+    width: 100%;
+    height: 22px;
+    background: #d9e2d0;
+    border: 3px solid var(--ink);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .timer-fill {
+    width: 100%;
+    height: 100%;
+    background: #65b741;
+    border-radius: 999px;
+    transition: width 1s linear, background-color 0.2s;
+  }
+
+  .timer-fill.warning {
+    background: #e53935;
+  }
+
+  .timer-message {
+    text-align: center;
+    font-size: 1rem;
+    min-height: 24px;
+    margin-top: 6px;
+    font-weight: bold;
+  }
+
+  .timer-message.warning {
+    color: #c62828;
+  }
+
+  /* Existing game styles */
+
   .grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 16px;
     width: min(420px, 100%);
   }
+
   .hole {
     aspect-ratio: 1;
     border: none;
@@ -44,114 +104,277 @@
     cursor: pointer;
     padding: 0;
   }
-  .hole:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
+
+  .hole:focus-visible {
+    outline: 4px solid #fff;
+    outline-offset: 3px;
+  }
+
   .mole {
     position: absolute;
-    left: 20%; width: 60%; height: 70%;
+    left: 20%;
+    width: 60%;
+    height: 70%;
     bottom: -75%;
     background: var(--mole);
     border-radius: 50% 50% 20% 20%;
     transition: bottom 0.12s ease-out;
   }
-  .mole::before, .mole::after {
-    content: ""; position: absolute; top: 28%;
-    width: 12%; height: 12%; background: var(--hole); border-radius: 50%;
+
+  .mole::before,
+  .mole::after {
+    content: "";
+    position: absolute;
+    top: 28%;
+    width: 12%;
+    height: 12%;
+    background: var(--hole);
+    border-radius: 50%;
   }
-  .mole::before { left: 28%; }
-  .mole::after { right: 28%; }
-  .hole.up .mole { bottom: 5%; }
-  .hole.hit .mole { background: #c9a27e; }
+
+  .mole::before {
+    left: 28%;
+  }
+
+  .mole::after {
+    right: 28%;
+  }
+
+  .hole.up .mole {
+    bottom: 5%;
+  }
+
+  .hole.hit .mole {
+    background: #c9a27e;
+  }
+
   #start {
     margin-top: 24px;
-    font: inherit; font-size: 1.25rem;
+    font: inherit;
+    font-size: 1.25rem;
     padding: 12px 28px;
     border: 3px solid var(--ink);
     border-radius: 999px;
     background: #ffe27a;
     cursor: pointer;
   }
-  #start:disabled { opacity: 0.5; cursor: default; }
-  @media (prefers-reduced-motion: reduce) { .mole { transition: none; } }
+
+  #start:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mole, .timer-fill {
+      transition: none;
+    }
+  }
 </style>
 </head>
+
 <body>
-  <h1>Garden Whack</h1>
-  <div class="stats">
-    <span>Score: <b id="score">0</b></span>
-    <span>Time: <b id="time">30</b></span>
-    <span>Best: <b id="best">0</b></span>
+
+<h1>Garden Whack</h1>
+
+<div class="stats">
+  <span>Score: <b id="score">0</b></span>
+  <span>Time: <b id="time">30</b></span>
+  <span>Best: <b id="best">0</b></span>
+</div>
+
+<!-- NEW: Visual countdown bar -->
+<div class="timer-container">
+  <div class="timer-track"
+       id="timer-track"
+       role="progressbar"
+       aria-label="Time remaining"
+       aria-valuemin="0"
+       aria-valuemax="30"
+       aria-valuenow="30">
+    <div class="timer-fill" id="timer-fill"></div>
   </div>
-  <div class="grid" id="grid"></div>
-  <button id="start">Start game</button>
+  <div class="timer-message" id="timer-message"
+       aria-live="polite"></div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<button id="start">Start game</button>
 
 <script>
   const GAME_SECONDS = 30;
+
   const grid = document.getElementById("grid");
   const scoreEl = document.getElementById("score");
   const timeEl = document.getElementById("time");
   const bestEl = document.getElementById("best");
   const startBtn = document.getElementById("start");
 
-  let score = 0, timeLeft = GAME_SECONDS, playing = false, current = -1;
-  let popTimer, clockTimer;
+  // NEW: Countdown bar elements
+  const timerFill = document.getElementById("timer-fill");
+  const timerMessage = document.getElementById("timer-message");
+  const timerTrack = document.getElementById("timer-track");
+
+  let score = 0;
+  let timeLeft = GAME_SECONDS;
+  let playing = false;
+  let current = -1;
+
+  let popTimer;
+  let clockTimer;
 
   let best = 0;
-  try { best = Number(localStorage.getItem("gardenWhackBest")) || 0; } catch (e) {}
+
+  try {
+    best = Number(localStorage.getItem("gardenWhackBest")) || 0;
+  } catch (e) {}
+
   bestEl.textContent = best;
 
+  // Create the nine holes
   const holes = Array.from({ length: 9 }, (_, i) => {
     const btn = document.createElement("button");
+
     btn.className = "hole";
     btn.setAttribute("aria-label", "Hole " + (i + 1));
     btn.innerHTML = '<div class="mole"></div>';
+
     btn.addEventListener("click", () => whack(i));
+
     grid.appendChild(btn);
+
     return btn;
   });
 
+  // NEW: Update the visual countdown bar
+  function updateTimerBar() {
+    const percentage = Math.max(
+      0,
+      (timeLeft / GAME_SECONDS) * 100
+    );
+
+    timerFill.style.width = percentage + "%";
+
+    timerTrack.setAttribute(
+      "aria-valuenow",
+      Math.max(0, timeLeft)
+    );
+
+    if (timeLeft <= 0) {
+      timerFill.classList.remove("warning");
+      timerMessage.classList.remove("warning");
+      timerMessage.textContent = "Time's Up!";
+    } else if (timeLeft <= 10 && playing) {
+      timerFill.classList.add("warning");
+      timerMessage.classList.add("warning");
+      timerMessage.textContent = "Hurry! Time is running out!";
+    } else {
+      timerFill.classList.remove("warning");
+      timerMessage.classList.remove("warning");
+      timerMessage.textContent = "";
+    }
+  }
+
   function popMole() {
     holes.forEach(h => h.classList.remove("up", "hit"));
+
     let next;
-    do { next = Math.floor(Math.random() * 9); } while (next === current);
+
+    do {
+      next = Math.floor(Math.random() * 9);
+    } while (next === current);
+
     current = next;
+
     holes[current].classList.add("up");
+
     const speed = Math.max(450, 1000 - score * 25);
+
     popTimer = setTimeout(popMole, speed);
   }
 
   function whack(i) {
-    if (!playing || i !== current || holes[i].classList.contains("hit")) return;
+    if (
+      !playing ||
+      i !== current ||
+      holes[i].classList.contains("hit")
+    ) {
+      return;
+    }
+
     holes[i].classList.add("hit");
+
     score++;
+
     scoreEl.textContent = score;
   }
 
   function startGame() {
-    score = 0; timeLeft = GAME_SECONDS; playing = true;
-    scoreEl.textContent = 0; timeEl.textContent = timeLeft;
+    clearTimeout(popTimer);
+    clearInterval(clockTimer);
+
+    score = 0;
+    timeLeft = GAME_SECONDS;
+    playing = true;
+
+    scoreEl.textContent = 0;
+    timeEl.textContent = timeLeft;
+
     startBtn.disabled = true;
+
+    // NEW: Reset visual timer
+    timerFill.style.transition = "none";
+    updateTimerBar();
+
+    // Force the browser to apply the reset before animating.
+    void timerFill.offsetWidth;
+    timerFill.style.transition = "";
+
     popMole();
+
     clockTimer = setInterval(() => {
       timeLeft--;
+
       timeEl.textContent = timeLeft;
-      if (timeLeft <= 0) endGame();
+
+      // NEW: Update countdown bar every second
+      updateTimerBar();
+
+      if (timeLeft <= 0) {
+        endGame();
+      }
     }, 1000);
   }
 
   function endGame() {
     playing = false;
-    clearTimeout(popTimer); clearInterval(clockTimer);
+
+    clearTimeout(popTimer);
+    clearInterval(clockTimer);
+
     holes.forEach(h => h.classList.remove("up", "hit"));
+
     if (score > best) {
       best = score;
       bestEl.textContent = best;
-      try { localStorage.setItem("gardenWhackBest", best); } catch (e) {}
+
+      try {
+        localStorage.setItem("gardenWhackBest", best);
+      } catch (e) {}
     }
+
     startBtn.textContent = "Play again";
     startBtn.disabled = false;
+
+    // NEW: Show the end-of-game message
+    updateTimerBar();
   }
 
   startBtn.addEventListener("click", startGame);
+
+  // Initialize the visual timer
+  updateTimerBar();
 </script>
+
 </body>
 </html>
