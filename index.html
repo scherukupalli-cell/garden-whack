@@ -61,6 +61,18 @@
   .mole::after { right: 28%; }
   .hole.up .mole { bottom: 5%; }
   .hole.hit .mole { background: #c9a27e; }
+  .levels { display: flex; gap: 8px; margin-bottom: 20px; }
+  .levels button {
+    font: inherit; font-size: 1rem;
+    padding: 6px 16px;
+    border: 3px solid var(--ink);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .levels button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .levels button:disabled { opacity: 0.5; cursor: default; }
   #start {
     margin-top: 24px;
     font: inherit; font-size: 1.25rem;
@@ -81,6 +93,11 @@
     <span>Time: <b id="time">30</b></span>
     <span>Best: <b id="best">0</b></span>
   </div>
+  <div class="levels" id="levels">
+    <button data-level="easy" aria-pressed="false">Easy</button>
+    <button data-level="normal" aria-pressed="true">Normal</button>
+    <button data-level="hard" aria-pressed="false">Hard</button>
+  </div>
   <div class="grid" id="grid"></div>
   <button id="start">Start game</button>
 
@@ -95,9 +112,28 @@
   let score = 0, timeLeft = GAME_SECONDS, playing = false, current = -1;
   let popTimer, clockTimer;
 
+  const LEVELS = {
+    easy:   { start: 1300, min: 700, step: 20 },
+    normal: { start: 1000, min: 450, step: 25 },
+    hard:   { start: 750,  min: 320, step: 30 }
+  };
+  const levelBtns = document.querySelectorAll("#levels button");
+  let level = "normal";
   let best = 0;
-  try { best = Number(localStorage.getItem("gardenWhackBest")) || 0; } catch (e) {}
-  bestEl.textContent = best;
+
+  function loadBest() {
+    best = 0;
+    try { best = Number(localStorage.getItem("gardenWhackBest-" + level)) || 0; } catch (e) {}
+    bestEl.textContent = best;
+  }
+  loadBest();
+
+  levelBtns.forEach(btn => btn.addEventListener("click", () => {
+    if (playing) return;
+    level = btn.dataset.level;
+    levelBtns.forEach(b => b.setAttribute("aria-pressed", b === btn));
+    loadBest();
+  }));
 
   const holes = Array.from({ length: 9 }, (_, i) => {
     const btn = document.createElement("button");
@@ -115,7 +151,8 @@
     do { next = Math.floor(Math.random() * 9); } while (next === current);
     current = next;
     holes[current].classList.add("up");
-    const speed = Math.max(450, 1000 - score * 25);
+    const cfg = LEVELS[level];
+    const speed = Math.max(cfg.min, cfg.start - score * cfg.step);
     popTimer = setTimeout(popMole, speed);
   }
 
@@ -130,6 +167,7 @@
     score = 0; timeLeft = GAME_SECONDS; playing = true;
     scoreEl.textContent = 0; timeEl.textContent = timeLeft;
     startBtn.disabled = true;
+    levelBtns.forEach(b => b.disabled = true);
     popMole();
     clockTimer = setInterval(() => {
       timeLeft--;
@@ -145,10 +183,11 @@
     if (score > best) {
       best = score;
       bestEl.textContent = best;
-      try { localStorage.setItem("gardenWhackBest", best); } catch (e) {}
+      try { localStorage.setItem("gardenWhackBest-" + level, best); } catch (e) {}
     }
     startBtn.textContent = "Play again";
     startBtn.disabled = false;
+    levelBtns.forEach(b => b.disabled = false);
   }
 
   startBtn.addEventListener("click", startGame);
